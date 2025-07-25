@@ -10,7 +10,7 @@ from typing import Optional
 
 # ===================== CONFIGURATION =====================
 SCHEDULE_HOUR = 12  # 10 AM (used after first run)
-SCHEDULE_MINUTE = 25 # 20 minutes (used after first run)
+SCHEDULE_MINUTE = 13 # 20 minutes (used after first run)
 IST = pytz.timezone('Asia/Kolkata')
 LOG_FILE = 'scheduler_audit.log'
 LOGIN_LOG_FILE = 'login_audit.log'

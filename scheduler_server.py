@@ -9,8 +9,8 @@ import requests
 from typing import Optional
 
 # ===================== CONFIGURATION =====================
-SCHEDULE_HOUR = 12  # 10 AM (used after first run)
-SCHEDULE_MINUTE = 13 # 20 minutes (used after first run)
+SCHEDULE_HOUR = 9  # 9 PM (used after first run)
+SCHEDULE_MINUTE = 15 # 46 minutes (used after first run)
 IST = pytz.timezone('Asia/Kolkata')
 LOG_FILE = 'scheduler_audit.log'
 LOGIN_LOG_FILE = 'login_audit.log'
@@ -777,13 +777,25 @@ def email_status():
     send_counts = defaultdict(int)
     today = datetime.now().date().isoformat()
     send_log_path = os.path.abspath(os.path.join(os.path.dirname(__file__), '../data/send_log.csv'))
+    # Load exhausted accounts
+    exhausted_accounts_path = os.path.abspath(os.path.join(os.path.dirname(__file__), '../data/exhausted_accounts.json'))
+    exhausted_accounts = set()
+    if os.path.exists(exhausted_accounts_path):
+        try:
+            with open(exhausted_accounts_path, 'r') as f:
+                exhausted_accounts = set(json.load(f))
+        except Exception as e:
+            exhausted_accounts = set()
     if os.path.exists(send_log_path):
         with open(send_log_path, 'r', encoding='utf-8') as f:
             reader = csv.DictReader(f)
             for row in reader:
                 if row['date_sent'][:10] == today:
                     send_counts[row['sender_email']] += 1
-    table_rows = ''.join([f'<tr><td>{acc["sender_email"]}</td><td>Session Only</td><td>{send_counts.get(acc["sender_email"], 0)}</td></tr>' for acc in sender_accounts])
+    table_rows = ''.join([
+        f'<tr><td>{acc["sender_email"]}</td><td>{"Yes" if acc["sender_email"] in exhausted_accounts else "No"}</td><td>{send_counts.get(acc["sender_email"], 0)}</td></tr>'
+        for acc in sender_accounts
+    ])
     html = f"""
     <html>
     <head><title>Email Account Status</title>
@@ -1111,8 +1123,8 @@ def run_campaign():
         subprocess.run([
             "python", "src/main.py",
             "--resume", "data/Ayush_Srivastava.pdf",
-            "--batch-size", "5",
-            "--daily-limit", "1001"
+            "--batch-size", "50",
+            "--daily-limit", "1251"
         ], check=True)
     except Exception as e:
         last_run_info['error'] = str(e)

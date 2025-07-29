@@ -99,6 +99,14 @@ def run_campaign(resume_path: str, batch_size: int = 50, daily_limit: int = 500,
 
         # Track exhausted accounts and last reset time
         exhausted_accounts = set()
+        exhausted_accounts_path = os.path.join(os.path.dirname(__file__), '../data/exhausted_accounts.json')
+        # Load exhausted accounts from file if exists
+        if os.path.exists(exhausted_accounts_path):
+            try:
+                with open(exhausted_accounts_path, 'r') as f:
+                    exhausted_accounts = set(json.load(f))
+            except Exception as e:
+                logger.warning(f"Could not load exhausted accounts: {e}")
         last_reset = time.time()
         RESET_INTERVAL = 24 * 60 * 60  # 24 hours in seconds
 
@@ -138,6 +146,12 @@ def run_campaign(resume_path: str, batch_size: int = 50, daily_limit: int = 500,
             if time.time() - last_reset > RESET_INTERVAL:
                 exhausted_accounts.clear()
                 last_reset = time.time()
+                # Clear the exhausted accounts file
+                try:
+                    with open(exhausted_accounts_path, 'w') as f:
+                        json.dump([], f)
+                except Exception as e:
+                    logger.warning(f"Could not clear exhausted accounts file: {e}")
 
             # Find next available (not exhausted) account
             attempts = 0
@@ -190,6 +204,12 @@ def run_campaign(resume_path: str, batch_size: int = 50, daily_limit: int = 500,
                 exhausted = result.get('exhausted', False)
                 if exhausted:
                     exhausted_accounts.add(account['sender_email'])
+                    # Persist exhausted accounts to file
+                    try:
+                        with open(exhausted_accounts_path, 'w') as f:
+                            json.dump(list(exhausted_accounts), f)
+                    except Exception as e:
+                        logger.warning(f"Could not save exhausted accounts: {e}")
                     logger.warning(f"Account {account['sender_email']} marked as exhausted due to SMTP error. Skipping for 24 hours.")
                     idx += 1  # Move to next account for next email
                     continue  # Try next account for this company

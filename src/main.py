@@ -5,7 +5,6 @@ from datetime import datetime
 from data_manager import DataManager
 from email_engine import EmailEngine
 from template_manager import TemplateManager
-from tracker import EmailTracker
 import os
 import time
 import signal
@@ -79,7 +78,6 @@ def signal_handler(signum, frame):
 def run_campaign(resume_path: str, batch_size: int = 50, daily_limit: int = 500, background: bool = False):
     """Run the email campaign with round-robin sender accounts, skipping exhausted accounts and resetting every 24 hours."""
     data_manager = None
-    email_tracker = None
     try:
         # Set up signal handlers
         signal.signal(signal.SIGINT, signal_handler)
@@ -87,7 +85,6 @@ def run_campaign(resume_path: str, batch_size: int = 50, daily_limit: int = 500,
         
         # Initialize managers
         data_manager = DataManager()
-        email_tracker = EmailTracker()  # Initialize email tracker
         config = load_config()
         template_manager = TemplateManager()
         
@@ -123,6 +120,36 @@ def run_campaign(resume_path: str, batch_size: int = 50, daily_limit: int = 500,
         companies = data_manager.get_unsent_companies(limit=daily_limit)
         total_companies = len(companies)
         logger.info(f"Starting campaign for {total_companies} companies")
+
+        # Check daily limit - only process up to the daily limit
+        emails_sent_today = data_manager.get_emails_sent_today()
+        logger.info(f"Emails sent today: {emails_sent_today}")
+        logger.info(f"Daily limit: {daily_limit}")
+
+        # Clear progress file if it's a new day (no emails sent today)
+        if emails_sent_today == 0:
+            try:
+                if os.path.exists('campaign_progress.json'):
+                    os.remove('campaign_progress.json')
+                    logger.info("Cleared progress file for new day")
+            except Exception as e:
+                logger.warning(f"Could not clear progress file: {e}")
+
+        if emails_sent_today >= daily_limit:
+            logger.info(f"Daily limit of {daily_limit} emails already reached. No more emails will be sent today.")
+            sys.exit(0)
+
+        # Calculate how many emails we can still send today
+        remaining_daily_limit = daily_limit - emails_sent_today
+        logger.info(f"Remaining emails for today: {remaining_daily_limit}")
+
+        # Limit companies to process based on remaining daily limit
+        if len(companies) > remaining_daily_limit:
+            companies = companies[:remaining_daily_limit]
+            logger.info(f"Limited to {remaining_daily_limit} companies due to daily limit")
+
+        total_companies = len(companies)
+        logger.info(f"Will process {total_companies} companies")
         
         # Load progress
         last_processed_id = load_progress()
@@ -218,11 +245,6 @@ def run_campaign(resume_path: str, batch_size: int = 50, daily_limit: int = 500,
                     status='sent' if success else 'failed',
                     error_message=None if success else error
                 )
-                email_tracker.mark_email_sent(
-                    company_id,
-                    status='sent' if success else 'failed',
-                    error_message=None if success else error
-                )
                 save_progress(company_id)
                 processed_count += 1
                 logger.info(f"Progress: {processed_count}/{total_companies} companies processed")
@@ -244,13 +266,22 @@ def run_campaign(resume_path: str, batch_size: int = 50, daily_limit: int = 500,
             except Exception as e:
                 logger.error(f"Error sending email for company {company['company_name']}: {e}")
                 data_manager.mark_email_sent(company['id'], status='failed', error_message=str(e))
-                email_tracker.mark_email_sent(company['id'], status='failed', error_message=str(e))
                 save_progress(company['id'])
                 processed_count += 1
                 idx += 1  # Move to next account for next email
         
         logger.info(f"Campaign completed. Sent {processed_count} emails.")
-        
+
+        # Verify database consistency
+        logger.info("Verifying database consistency...")
+        consistency_stats = data_manager.verify_database_consistency()
+        if consistency_stats.get('companies_tracking_match') and consistency_stats.get('today_match'):
+            logger.info("✅ Database consistency verified - all updates successful")
+        else:
+            logger.warning("⚠️ Database consistency issues detected:")
+            logger.warning(f"Companies vs Tracking records: {consistency_stats.get('companies_tracking_match')}")
+            logger.warning(f"Today's records match: {consistency_stats.get('today_match')}")
+
         # Save final progress and exit
         if processed_count > 0:
             save_progress(companies[-1]['id'] if companies else last_processed_id)
@@ -279,27 +310,18 @@ def run_campaign(resume_path: str, batch_size: int = 50, daily_limit: int = 500,
                         if result:
                             logger.info(f"Tracking DB - ID {company['id']}: status={result[0]}, sent={result[1]}")
         logger.info("Campaign completed successfully. Exiting...")
-        if background:
-            if data_manager:
-                data_manager.close()
-            if email_tracker:
-                email_tracker.close()
+        if data_manager:
+            data_manager.close()
         sys.exit(0)
     except KeyboardInterrupt:
         logger.info("\nCampaign interrupted by user. Cleaning up...")
-        if background:
-            if data_manager:
-                data_manager.close()
-            if email_tracker:
-                email_tracker.close()
+        if data_manager:
+            data_manager.close()
         sys.exit(0)
     except Exception as e:
         logger.error(f"Error running campaign: {str(e)}")
-        if background:
-            if data_manager:
-                data_manager.close()
-            if email_tracker:
-                email_tracker.close()
+        if data_manager:
+            data_manager.close()
         sys.exit(1)
 
 if __name__ == '__main__':

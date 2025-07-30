@@ -26,6 +26,7 @@ class DataManager:
     def _ensure_db_exists(self):
         """Create database and tables if they don't exist."""
         try:
+            # Ensure companies.db exists and has proper structure
             with sqlite3.connect(self.companies_db) as conn:
                 cursor = conn.cursor()
                 
@@ -76,6 +77,10 @@ class DataManager:
                     pass
                 
                 conn.commit()
+            
+            # Ensure email_tracking.db exists and has proper structure
+            with sqlite3.connect(self.email_tracking_db) as conn:
+                cursor = conn.cursor()
                 
                 # Create sent_emails table if it doesn't exist
                 cursor.execute("""
@@ -145,15 +150,14 @@ class DataManager:
         """Get count of emails sent today."""
         try:
             with sqlite3.connect(self.companies_db) as conn:
-                today = datetime.now().date()
-                tomorrow = today + timedelta(days=1)
+                today = datetime.now().date().isoformat()
                 
                 query = """
                     SELECT COUNT(*) 
-                    FROM sent_emails 
-                    WHERE date(sent_at) = date('now')
+                    FROM companies 
+                    WHERE date(sent_timestamp) = ?
                 """
-                count = conn.execute(query).fetchone()[0]
+                count = conn.execute(query, (today,)).fetchone()[0]
                 return count
                 
         except Exception as e:
@@ -268,19 +272,19 @@ class DataManager:
             with sqlite3.connect(self.companies_db) as conn:
                 query = """
                     SELECT 
-                        c.company_name,
-                        c.hr_email,
-                        s.sent_at,
-                        s.status,
-                        s.error_message
-                    FROM sent_emails s
-                    JOIN companies c ON s.company_id = c.id
-                    ORDER BY s.sent_at DESC
+                        company_name,
+                        hr_email,
+                        sent_timestamp as sent_at,
+                        status,
+                        error_message
+                    FROM companies
+                    WHERE sent_timestamp IS NOT NULL
+                    ORDER BY sent_timestamp DESC
                 """
                 return pd.read_sql_query(query, conn)
                 
         except Exception as e:
-            logger.error(f"Error generating sent emails report: {str(e)}")
+            logger.error(f"Error getting sent emails report: {str(e)}")
             raise
             
     def mark_companies_as_sent(self, company_names: List[str]) -> None:
@@ -412,6 +416,59 @@ class DataManager:
         except Exception as e:
             logger.error(f"Error getting sent companies summary: {str(e)}")
             raise
+
+    def verify_database_consistency(self) -> dict:
+        """Verify database consistency and return statistics."""
+        try:
+            stats = {}
+            
+            # Check companies.db
+            with sqlite3.connect(self.companies_db) as conn:
+                cursor = conn.cursor()
+                
+                # Total companies
+                cursor.execute("SELECT COUNT(*) FROM companies")
+                stats['total_companies'] = cursor.fetchone()[0]
+                
+                # Sent companies
+                cursor.execute("SELECT COUNT(*) FROM companies WHERE sent_timestamp IS NOT NULL")
+                stats['sent_companies'] = cursor.fetchone()[0]
+                
+                # Pending companies
+                cursor.execute("SELECT COUNT(*) FROM companies WHERE sent_timestamp IS NULL")
+                stats['pending_companies'] = cursor.fetchone()[0]
+                
+                # Today's sent
+                today = datetime.now().date().isoformat()
+                cursor.execute("SELECT COUNT(*) FROM companies WHERE date(sent_timestamp) = ?", (today,))
+                stats['sent_today'] = cursor.fetchone()[0]
+                
+                # Failed emails
+                cursor.execute("SELECT COUNT(*) FROM companies WHERE status = 'failed'")
+                stats['failed_emails'] = cursor.fetchone()[0]
+            
+            # Check email_tracking.db
+            with sqlite3.connect(self.email_tracking_db) as conn:
+                cursor = conn.cursor()
+                
+                # Total records in tracking
+                cursor.execute("SELECT COUNT(*) FROM sent_emails")
+                stats['tracking_records'] = cursor.fetchone()[0]
+                
+                # Today's tracking records
+                cursor.execute("SELECT COUNT(*) FROM sent_emails WHERE date(sent_date) = ?", (today,))
+                stats['tracking_today'] = cursor.fetchone()[0]
+            
+            # Check consistency
+            stats['companies_tracking_match'] = stats['sent_companies'] == stats['tracking_records']
+            stats['today_match'] = stats['sent_today'] == stats['tracking_today']
+            
+            logger.info(f"Database consistency check: {stats}")
+            return stats
+            
+        except Exception as e:
+            logger.error(f"Error verifying database consistency: {str(e)}")
+            return {'error': str(e)}
 
     def close(self):
         """Close database connections (no-op, since we store paths)."""

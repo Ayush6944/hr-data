@@ -1,31 +1,20 @@
 {
   "email_accounts": [
+   
     {
       "id": "account_1",
       "smtp_server": "smtp.gmail.com",
       "smtp_port": 587,
-      "sender_email": "faltuwali0@gmail.com",
-      "sender_password": "dpaebywdvlqxojnv",
+      "sender_email": "ayushsrivastava.sde@gmail.com",
+      "sender_password": "inhatxcrrpkdemrk",
       "use_tls": true,
-      "daily_limit_range": [300, 350],
+      "daily_limit_range": [300, 400],
       "batch_delay": 2,
       "max_retries": 2,
       "enabled": true
     },
     {
       "id": "account_2",
-      "smtp_server": "smtp.gmail.com",
-      "smtp_port": 587,
-      "sender_email": "ayushsrivastava.sde@gmail.com",
-      "sender_password": "kzlwhzyuxerfavce",
-      "use_tls": true,
-      "daily_limit_range": [300, 350],
-      "batch_delay": 2,
-      "max_retries": 2,
-      "enabled": true
-    },
-    {
-      "id": "account_3",
       "smtp_server": "smtp.gmail.com",
       "smtp_port": 587,
       "sender_email": "ayushsrivastava.dev402@gmail.com",

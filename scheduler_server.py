@@ -9,8 +9,8 @@ import requests
 from typing import Optional
 
 # ===================== CONFIGURATION =====================
-SCHEDULE_HOUR = 12  # 9 PM (used after first run)
-SCHEDULE_MINUTE = 0 # 46 minutes (used after first run)
+SCHEDULE_HOUR = 1 # 9 PM (used after first run)
+SCHEDULE_MINUTE = 15 # 46 minutes (used after first run)
 IST = pytz.timezone('Asia/Kolkata')
 LOG_FILE = 'scheduler_audit.log'
 LOGIN_LOG_FILE = 'login_audit.log'
@@ -1124,7 +1124,7 @@ def run_campaign():
             "python", "src/main.py",
             "--resume", "data/Ayush_Srivastava.pdf",
             "--batch-size", "50",
-            "--daily-limit", "1251"
+            "--daily-limit", "850"
         ], check=True)
     except Exception as e:
         last_run_info['error'] = str(e)
